@@ -44,18 +44,20 @@ impl Vertex {
 #[derive(Debug)]
 pub struct Triangle(pub u32, pub u32, pub u32);
 
-/// Selects a range of vertices or trinagles.
+/// Selects a range of vertices or triangles.
 #[derive(Debug)]
 pub struct Selection {
 	pub offset: u32,
 	pub len: u32
 }
 
-pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-	Ok(Selection {
-		offset: r.read_u32::<LittleEndian>()?,
-		len: r.read_u32::<LittleEndian>()?
-	})
+impl Selection {
+	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+		Ok(Selection {
+			offset: r.read_u32::<LittleEndian>()?,
+			len: r.read_u32::<LittleEndian>()?
+		})
+	}
 }
 
 /// An axis-aligned bounding box containing a lower corner and upper corner.

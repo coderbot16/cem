@@ -1,8 +1,9 @@
 [package]
-name = "cem"
+name = "cemconv"
 version = "0.1.0"
 authors = ["coderbot16 <coderbot16@gmail.com>"]
-description = "Converter tool for the CEM format."
 
 [dependencies]
-byteorder = "1"
+cem = { path = "../" }
+structopt = "0.1.6"
+structopt-derive = "0.1.6"

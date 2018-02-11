@@ -1,6 +1,7 @@
 extern crate byteorder;
 
-pub mod modern;
+pub mod v1;
+pub mod v2;
 pub mod types;
 
 use std::io::{self, Read};
@@ -15,14 +16,16 @@ pub const MAGIC: u32 = 0x464D5353;
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub struct ModelHeader {
 	pub magic: u32,
-	pub version: u32
+	pub major: u16,
+	pub minor: u16
 }
 
 impl ModelHeader {
 	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
 		Ok(ModelHeader {
 			magic: r.read_u32::<LittleEndian>()?,
-			version: r.read_u32::<LittleEndian>()?
+			major: r.read_u16::<LittleEndian>()?,
+			minor: r.read_u16::<LittleEndian>()?
 		})
 	}
 }

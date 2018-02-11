@@ -1,87 +1,29 @@
-use types::{Mat4, Pos3, Pos2};
+use types::{Mat4, Pos3, Pos2, Aabb};
 use std::io::{self, Read};
 use byteorder::{ReadBytesExt, LittleEndian};
 use ::{string, ModelHeader, MAGIC};
 
-pub const EXPECTED_MODEL_HEADER: ModelHeader = ModelHeader { magic: MAGIC, version: 2 };
+/// Expected: SSMF v2.0
+pub const EXPECTED_MODEL_HEADER: ModelHeader = ModelHeader { magic: MAGIC, major: 2, minor: 0 };
 
-/// A single vertex. Contains the position, a relevant vertex normal, and the position on the material's texture.
-#[derive(Debug)]
-pub struct Vertex {
-	pub position: Pos3,
-	pub normal:   Pos3,
-	pub texture:  Pos2
-}
-
-impl Vertex {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(Vertex {
-			position: Pos3::read(r)?,
-			normal: Pos3::read(r)?,
-			texture: Pos2::read(r)?
-		})
-	}
-}
+pub type VertexIndex = u32;
 
 /// An indexed triangle. The 3 indices represent the 3 vertices that make up this triangle.
 #[derive(Debug)]
-pub struct Triangle(pub u32, pub u32, pub u32);
+pub struct Triangle(pub VertexIndex, pub VertexIndex, pub VertexIndex);
 
-/// Selects a range of vertices or triangles.
+/// Selects a range of triangles.
 #[derive(Debug)]
-pub struct Selection {
+pub struct TriangleSelection {
 	pub offset: u32,
 	pub len: u32
 }
 
-impl Selection {
+impl TriangleSelection {
 	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(Selection {
+		Ok(TriangleSelection {
 			offset: r.read_u32::<LittleEndian>()?,
 			len: r.read_u32::<LittleEndian>()?
-		})
-	}
-}
-
-/// An axis-aligned bounding box containing a lower corner and upper corner.
-#[derive(Debug)]
-pub struct Aabb {
-	pub lower: Pos3,
-	pub upper: Pos3
-}
-
-impl Aabb {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(Aabb {
-			lower: Pos3::read(r)?,
-			upper: Pos3::read(r)?
-		})
-	}
-}
-
-/// Contains metadata about the quantities of certain things in this file.
-/// Not useful on its own, but necessary to parse the rest of the file.
-#[derive(Debug)]
-pub struct Quantities {
-	pub tris: u32,
-	pub vertices: u32,
-	pub tags: u32,
-	pub materials: u32,
-	pub frames: u32,
-	pub additional_models: u32,
-	pub lod_levels: u32
-}
-
-impl Quantities {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(Quantities {
-			tris: r.read_u32::<LittleEndian>()?,
-			vertices: r.read_u32::<LittleEndian>()?,
-			tags: r.read_u32::<LittleEndian>()?,
-			materials: r.read_u32::<LittleEndian>()?,
-			frames: r.read_u32::<LittleEndian>()?,
-			additional_models: r.read_u32::<LittleEndian>()?,
-			lod_levels: r.read_u32::<LittleEndian>()?
 		})
 	}
 }
@@ -133,6 +75,51 @@ impl Model {
 	}
 }
 
+/// Contains metadata about the quantities of certain things in this file.
+/// Not useful on its own, but necessary to parse the rest of the file.
+#[derive(Debug)]
+pub struct Quantities {
+	pub tris: u32,
+	pub vertices: u32,
+	pub tags: u32,
+	pub materials: u32,
+	pub frames: u32,
+	pub additional_models: u32,
+	pub lod_levels: u32
+}
+
+impl Quantities {
+	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+		Ok(Quantities {
+			tris: r.read_u32::<LittleEndian>()?,
+			vertices: r.read_u32::<LittleEndian>()?,
+			tags: r.read_u32::<LittleEndian>()?,
+			materials: r.read_u32::<LittleEndian>()?,
+			frames: r.read_u32::<LittleEndian>()?,
+			additional_models: r.read_u32::<LittleEndian>()?,
+			lod_levels: r.read_u32::<LittleEndian>()?
+		})
+	}
+}
+
+/// Contains the information about the root. Appears to simply define the center of the model.
+#[derive(Debug)]
+pub struct Root {
+	/// Name of this sub-model, or just "Scene Root" if this is the root model.
+	pub name: String,
+	/// The point that represents the center of the model.
+	pub center: Pos3
+}
+
+impl Root {
+	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+		Ok(Root {
+			name: string::read_string_iso(r)?,
+			center: Pos3::read(r)?
+		})
+	}
+}
+
 /// A single level of detail. Contains all of the triangles for this level.
 #[derive(Debug)]
 pub struct Lod(pub Vec<Triangle>);
@@ -154,24 +141,6 @@ impl Lod {
 	}
 }
 
-/// Contains the information about the root. Appears to simply define the center of the model.
-#[derive(Debug)]
-pub struct Root {
-	/// Always "Scene Root"
-	pub name: String,
-	/// The point that represents the center of the model.
-	pub center: Pos3
-}
-
-impl Root {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(Root {
-			name: string::read_string_iso(r)?,
-			center: Pos3::read(r)?
-		})
-	}
-}
-
 /// A material to be applied to vertices. Contains special names, the texture, and target vertices / triangles.
 /// The name of the material may give it special meaning depending on the context. For example, the "player color" material
 /// is used to render the player color.
@@ -182,9 +151,10 @@ pub struct Material {
 	/// in most cases by a file like dbgraphics.
 	pub texture: u32,
 	/// The range of triangles for each LOD level.
-	pub triangles: Vec<Selection>,
-	/// The range of vertices used by the triangles at all LOD levels.
-	pub vertices: Selection,
+	pub triangles: Vec<TriangleSelection>,
+	/// Value that the vertex index of
+	pub vertex_offset: VertexIndex,
+	pub vertex_count: u32,
 	pub name2: String
 }
 
@@ -196,12 +166,13 @@ impl Material {
 			triangles: {
 				let mut ranges = Vec::with_capacity(lod_levels);
 				for _ in 0..lod_levels {
-					ranges.push(Selection::read(r)?);
+					ranges.push(TriangleSelection::read(r)?);
 				}
 
 				ranges
 			},
-			vertices: Selection::read(r)?,
+			vertex_offset: r.read_u32::<LittleEndian>()?,
+			vertex_count: r.read_u32::<LittleEndian>()?,
 			name2: string::read_string_iso(r)?
 		})
 	}
@@ -241,6 +212,24 @@ impl Frame {
 			},
 			transform: Mat4::read(r)?,
 			bound: Aabb::read(r)?
+		})
+	}
+}
+
+/// A single vertex. Contains the position, a relevant vertex normal, and the position on the material's texture.
+#[derive(Debug)]
+pub struct Vertex {
+	pub position: Pos3,
+	pub normal:   Pos3,
+	pub texture:  Pos2
+}
+
+impl Vertex {
+	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+		Ok(Vertex {
+			position: Pos3::read(r)?,
+			normal: Pos3::read(r)?,
+			texture: Pos2::read(r)?
 		})
 	}
 }

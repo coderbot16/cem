@@ -51,3 +51,19 @@ impl Pos3 {
 		))
 	}
 }
+
+/// An axis-aligned bounding box containing a lower corner and upper corner.
+#[derive(Debug)]
+pub struct Aabb {
+	pub lower: Pos3,
+	pub upper: Pos3
+}
+
+impl Aabb {
+	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+		Ok(Aabb {
+			lower: Pos3::read(r)?,
+			upper: Pos3::read(r)?
+		})
+	}
+}

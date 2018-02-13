@@ -7,3 +7,4 @@ authors = ["coderbot16 <coderbot16@gmail.com>"]
 cem = { path = "../" }
 structopt = "0.1.6"
 structopt-derive = "0.1.6"
+wavefront_obj = "5.1.0"

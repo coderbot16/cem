@@ -1,7 +1,7 @@
 use std::io::{self, Read};
 use byteorder::{ReadBytesExt, LittleEndian};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Mat4(pub [f32; 16]);
 
 impl Mat4 {
@@ -27,7 +27,7 @@ impl Mat4 {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Pos2(pub f32, pub f32);
 
 impl Pos2 {
@@ -39,7 +39,7 @@ impl Pos2 {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Pos3(pub f32, pub f32, pub f32);
 
 impl Pos3 {

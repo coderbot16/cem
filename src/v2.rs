@@ -1,5 +1,5 @@
 use types::{Mat4, Pos3, Pos2, Aabb};
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, LittleEndian};
 use ::{string, ModelHeader, MAGIC};
 
@@ -13,7 +13,7 @@ pub type VertexIndex = u32;
 pub struct Triangle(pub VertexIndex, pub VertexIndex, pub VertexIndex);
 
 /// Selects a range of triangles.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct TriangleSelection {
 	pub offset: u32,
 	pub len: u32
@@ -72,6 +72,10 @@ impl Model {
 			tag_points,
 			frames
 		})
+	}
+
+	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
+		unimplemented!()
 	}
 }
 
@@ -155,7 +159,8 @@ pub struct Material {
 	/// Value that the vertex index of
 	pub vertex_offset: VertexIndex,
 	pub vertex_count: u32,
-	pub name2: String
+	/// Name of the texture used.
+	pub texture_name: String
 }
 
 impl Material {
@@ -173,7 +178,7 @@ impl Material {
 			},
 			vertex_offset: r.read_u32::<LittleEndian>()?,
 			vertex_count: r.read_u32::<LittleEndian>()?,
-			name2: string::read_string_iso(r)?
+			texture_name: string::read_string_iso(r)?
 		})
 	}
 }
@@ -217,7 +222,7 @@ impl Frame {
 }
 
 /// A single vertex. Contains the position, a relevant vertex normal, and the position on the material's texture.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Vertex {
 	pub position: Pos3,
 	pub normal:   Pos3,

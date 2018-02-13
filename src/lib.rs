@@ -4,8 +4,8 @@ pub mod v1;
 pub mod v2;
 pub mod types;
 
-use std::io::{self, Read};
-use byteorder::{ReadBytesExt, LittleEndian};
+use std::io::{self, Read, Write};
+use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
 
 /// The expected magic number for all CEM models. If this does not match, then
 /// this file is almost certainly not a CEM file.
@@ -27,6 +27,12 @@ impl ModelHeader {
 			major: r.read_u16::<LittleEndian>()?,
 			minor: r.read_u16::<LittleEndian>()?
 		})
+	}
+
+	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
+		w.write_u32::<LittleEndian>(self.magic)?;
+		w.write_u16::<LittleEndian>(self.major)?;
+		w.write_u16::<LittleEndian>(self.minor)
 	}
 }
 

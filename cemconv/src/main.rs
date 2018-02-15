@@ -7,13 +7,13 @@ extern crate wavefront_obj;
 use wavefront_obj::obj::{self, Object};
 use std::fs::File;
 use std::io::{self, Read, Write};
-use cem::{ModelHeader, v1, v2};
+use cem::{ModelHeader, v2};
 
 #[derive(StructOpt, Debug)]
 struct Opt {
 	#[structopt(short = "i", long = "input", help = "Input file to convert, default is stdout")]
 	input: Option<String>,
-	#[structopt(short = "j", long = "iformat", help = "Format to use for the input")]
+	#[structopt(short = "g", long = "iformat", help = "Format to use for the input")]
 	input_format: Option<String>,
 	#[structopt(short = "f", long = "format", help = "Format to use as the output")]
 	format: String,
@@ -79,7 +79,7 @@ fn main() {
 			input_format,
 			format
 		)
-	};
+	}.unwrap();
 }
 
 fn convert<I, O>(mut i: I, mut o: O, input_format: Format, format: Format) -> io::Result<()> where I: Read, O: Write {
@@ -99,6 +99,20 @@ fn convert<I, O>(mut i: I, mut o: O, input_format: Format, format: Format) -> io
 
 			Ok(())
 		},
+		(Format::Cem(2, 0), Format::Cem(2, 0)) => {
+			let header = ModelHeader::read(&mut i)?;
+
+			if header == v2::EXPECTED_MODEL_HEADER {
+				let model = v2::Model::read(&mut i)?;
+
+				header.write(&mut o)?;
+				model.write(&mut o)
+
+				// TODO: Rewrite sub models as well.
+			} else {
+				unimplemented!("Cannon rewrite non-CEMv2 files yet.")
+			}
+		},
 		(Format::Cem(_, _), Format::Obj) => {
 			let header = ModelHeader::read(&mut i)?;
 
@@ -116,14 +130,14 @@ fn convert<I, O>(mut i: I, mut o: O, input_format: Format, format: Format) -> io
 	}
 }
 
-fn obj_to_cem(i: &Object) -> v2::Model {
+fn obj_to_cem(_i: &Object) -> v2::Model {
 	unimplemented!("OBJ to CEM not supported.")
 }
 
 fn cem2_to_obj(cem: v2::Model) -> String {
 	use std::fmt::Write;
 
-	let triangle_data = &cem.lod_levels[0].0;
+	let triangle_data = &cem.lod_levels[0];
 	let frame = &cem.frames[0];
 
 	let mut string = String::new();
@@ -131,15 +145,15 @@ fn cem2_to_obj(cem: v2::Model) -> String {
 	for &v2::Vertex { position, normal, texture } in frame.vertices.iter() {
 		// Swap Y and Z to make models look upright. However, this seems to make them appear flipped across the Y=X axis?
 		// TODO: This needs to be investigated further.
-		writeln!(string, "v {} {} {}", position.0, position.2, position.1);
-		writeln!(string, "vn {} {} {}", normal.0, normal.2, normal.1);
-		writeln!(string, "vt {} {}", texture.0, texture.1);
+		writeln!(string, "v {} {} {}", position.0, position.2, position.1).unwrap();
+		writeln!(string, "vn {} {} {}", normal.0, normal.2, normal.1).unwrap();
+		writeln!(string, "vt {} {}", texture.0, texture.1).unwrap();
 	}
 
-	for &v2::Material { ref name, texture, ref triangles, vertex_offset, vertex_count, ref texture_name } in &cem.materials {
+	for &v2::Material { ref name, texture, ref triangles, vertex_offset, vertex_count: _vertex_count, ref texture_name } in &cem.materials {
 		let triangle_slice = triangles[0];
 
-		writeln!(string, "# name: {}, texture: {}, texture_name: {}", name, texture, texture_name);
+		writeln!(string, "# name: {}, texture: {}, texture_name: {}", name, texture, texture_name).unwrap();
 
 		for index in 0..triangle_slice.len {
 			let index = index + triangle_slice.offset;
@@ -151,7 +165,7 @@ fn cem2_to_obj(cem: v2::Model) -> String {
 				vertex_offset + triangle.2 + 1
 			);
 
-			writeln!(string, "f {}/{}/{} {}/{}/{} {}/{}/{}", indices.0, indices.0, indices.0, indices.1, indices.1, indices.1, indices.2, indices.2, indices.2);
+			writeln!(string, "f {}/{}/{} {}/{}/{} {}/{}/{}", indices.0, indices.0, indices.0, indices.1, indices.1, indices.1, indices.2, indices.2, indices.2).unwrap();
 		}
 	}
 

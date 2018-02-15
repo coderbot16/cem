@@ -38,30 +38,46 @@ impl ModelHeader {
 
 
 mod string {
-	use byteorder::{LittleEndian, ReadBytesExt};
-	use std::io::{Read, Error};
+	use byteorder::{LittleEndian, WriteBytesExt, ReadBytesExt};
+	use std::io::{self, Read, Write};
 
-	pub fn read_string_iso<T: Read>(data: &mut T) -> Result<String, Error> {
+	pub fn read_string_iso<T: Read>(data: &mut T) -> io::Result<String> {
 		let len = data.read_u32::<LittleEndian>()? as usize;
-
-		if len == 0 {
-			return Ok(String::new());
-		}
-
 		let mut string = String::with_capacity(len);
+		let mut end = false;
 
-		for _ in 0..len-1 {
+		for _ in 0..len {
 			let byte = data.read_u8()?;
 
 			if byte==0 {
-				continue;
+				end = true;
 			}
 
-			string.push(byte as char);
+			if !end {
+				string.push(byte as char);
+			}
 		}
 
-		assert_eq!(data.read_u8()?, 0);
-
 		Ok(string)
+	}
+
+	/// Writes a string encoded with ISO-8859-1, replacing unknown characters with a question mark ('?').
+	pub fn write_string_iso<W: Write>(w: &mut W, s: &str) -> io::Result<()> where W: Write {
+		let s = s.trim_right_matches('\0');
+		let len = s.chars().count() + 1;
+
+		if len > u32::max_value() as usize {
+			return Err(io::Error::new(io::ErrorKind::InvalidData, "Cannot write a string more than 4GB long"));
+		}
+
+		w.write_u32::<LittleEndian>(len as u32)?;
+
+		for char in s.chars() {
+			// Simply replace all unknown chars with a ?, as an encoding error.
+
+			w.write_u8(if char < '\u{256}' { char as u8 } else { '?' as u8 })?;
+		}
+
+		w.write_u8(0)
 	}
 }

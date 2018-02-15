@@ -1,5 +1,5 @@
-use std::io::{self, Read};
-use byteorder::{ReadBytesExt, LittleEndian};
+use std::io::{self, Read, Write};
+use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Mat4(pub [f32; 16]);
@@ -25,6 +25,28 @@ impl Mat4 {
 			data.read_f32::<LittleEndian>()?
 		]))
 	}
+
+	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
+		w.write_f32::<LittleEndian>(self.0[0])?;
+		w.write_f32::<LittleEndian>(self.0[1])?;
+		w.write_f32::<LittleEndian>(self.0[2])?;
+		w.write_f32::<LittleEndian>(self.0[3])?;
+
+		w.write_f32::<LittleEndian>(self.0[4])?;
+		w.write_f32::<LittleEndian>(self.0[5])?;
+		w.write_f32::<LittleEndian>(self.0[6])?;
+		w.write_f32::<LittleEndian>(self.0[7])?;
+
+		w.write_f32::<LittleEndian>(self.0[8])?;
+		w.write_f32::<LittleEndian>(self.0[9])?;
+		w.write_f32::<LittleEndian>(self.0[10])?;
+		w.write_f32::<LittleEndian>(self.0[11])?;
+
+		w.write_f32::<LittleEndian>(self.0[12])?;
+		w.write_f32::<LittleEndian>(self.0[13])?;
+		w.write_f32::<LittleEndian>(self.0[14])?;
+		w.write_f32::<LittleEndian>(self.0[15])
+	}
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -36,6 +58,11 @@ impl Pos2 {
 			data.read_f32::<LittleEndian>()?,
 			data.read_f32::<LittleEndian>()?
 		))
+	}
+
+	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
+		w.write_f32::<LittleEndian>(self.0)?;
+		w.write_f32::<LittleEndian>(self.1)
 	}
 }
 
@@ -49,6 +76,12 @@ impl Pos3 {
 			data.read_f32::<LittleEndian>()?,
 			data.read_f32::<LittleEndian>()?
 		))
+	}
+
+	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
+		w.write_f32::<LittleEndian>(self.0)?;
+		w.write_f32::<LittleEndian>(self.1)?;
+		w.write_f32::<LittleEndian>(self.2)
 	}
 }
 
@@ -65,5 +98,10 @@ impl Aabb {
 			lower: Pos3::read(r)?,
 			upper: Pos3::read(r)?
 		})
+	}
+
+	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
+		self.lower.write(w)?;
+		self.upper.write(w)
 	}
 }

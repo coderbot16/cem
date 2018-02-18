@@ -1,8 +1,21 @@
 extern crate byteorder;
 
+pub mod scene;
+
+/// V1 model format. Found rarely in Empire Earth 1, but not the native format of any released game.
 pub mod v1;
+
+/// V2 model format. Primarily found in Empire Earth 1.
 pub mod v2;
+
+// NOTE: I have not yet found v3 and v4 models in the wild yet.
+// However, they may be present in other games running on the Titan Engine.
+
+/// V5 model format. Primarily found in Empires: Dawn of the Modern World.
+pub mod v5;
+
 pub mod types;
+pub mod collider;
 
 use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
@@ -11,6 +24,10 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
 /// this file is almost certainly not a CEM file.
 /// FCC version of "SSMF"
 pub const MAGIC: u32 = 0x464D5353;
+
+pub use v1::V1;
+pub use v2::V2;
+pub use scene::{Scene, Model};
 
 /// The header, contains the magic number and revision. The current revision is 2.
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
@@ -35,7 +52,6 @@ impl ModelHeader {
 		w.write_u16::<LittleEndian>(self.minor)
 	}
 }
-
 
 mod string {
 	use byteorder::{LittleEndian, WriteBytesExt, ReadBytesExt};

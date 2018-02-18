@@ -7,7 +7,7 @@ extern crate wavefront_obj;
 use wavefront_obj::obj::{self, Object};
 use std::fs::File;
 use std::io::{self, Read, Write};
-use cem::{ModelHeader, v2};
+use cem::{ModelHeader, v2, V2, Scene, Model};
 
 #[derive(StructOpt, Debug)]
 struct Opt {
@@ -94,21 +94,13 @@ fn convert<I, O>(mut i: I, mut o: O, input_format: Format, format: Format) -> io
 
 			let model = obj_to_cem(&obj.objects[0]);
 
-			v2::EXPECTED_MODEL_HEADER.write(&mut o)?;
-			model.write(&mut o)?;
-
-			Ok(())
+			Scene::root(model).write(&mut o)
 		},
 		(Format::Cem(2, 0), Format::Cem(2, 0)) => {
 			let header = ModelHeader::read(&mut i)?;
 
-			if header == v2::EXPECTED_MODEL_HEADER {
-				let model = v2::Model::read(&mut i)?;
-
-				header.write(&mut o)?;
-				model.write(&mut o)
-
-				// TODO: Rewrite sub models as well.
+			if header == V2::HEADER {
+				Scene::<V2>::read_without_header(&mut i)?.write(&mut o)
 			} else {
 				unimplemented!("Cannon rewrite non-CEMv2 files yet.")
 			}
@@ -116,10 +108,10 @@ fn convert<I, O>(mut i: I, mut o: O, input_format: Format, format: Format) -> io
 		(Format::Cem(_, _), Format::Obj) => {
 			let header = ModelHeader::read(&mut i)?;
 
-			if header == v2::EXPECTED_MODEL_HEADER {
-				let model = v2::Model::read(&mut i)?;
+			if header == V2::HEADER {
+				let scene = Scene::<V2>::read_without_header(&mut i)?;
 
-				let buffer = cem2_to_obj(model);
+				let buffer = cem2_to_obj(scene.model);
 
 				o.write_all(buffer.as_bytes())
 			} else {
@@ -130,11 +122,11 @@ fn convert<I, O>(mut i: I, mut o: O, input_format: Format, format: Format) -> io
 	}
 }
 
-fn obj_to_cem(_i: &Object) -> v2::Model {
+fn obj_to_cem(_i: &Object) -> V2 {
 	unimplemented!("OBJ to CEM not supported.")
 }
 
-fn cem2_to_obj(cem: v2::Model) -> String {
+fn cem2_to_obj(cem: V2) -> String {
 	use std::fmt::Write;
 
 	let triangle_data = &cem.lod_levels[0];

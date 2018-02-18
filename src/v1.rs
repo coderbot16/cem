@@ -1,13 +1,16 @@
-use types::{Mat4, Pos3, Aabb};
+use types::{Mat4, Pos3};
+use collider::Aabb;
 use std::io::{self, Read};
 use byteorder::{ReadBytesExt, LittleEndian};
 use ::{string, ModelHeader, MAGIC};
+use scene::NodeData;
+use std::borrow::Cow;
 
 // 1.1
 // 	Adds the TagPoints chunk
-//  Adds the tag_points count in Root.
+//  Adds the tag_points count in Quantities.
 // 1.2
-//  Adds the sub_models count in Root.
+//  Adds the sub_models count in Quantities.
 // 1.3
 //  Adds the array to MiscChunk.
 
@@ -15,9 +18,11 @@ use ::{string, ModelHeader, MAGIC};
 pub const EXPECTED_MODEL_HEADER: ModelHeader = ModelHeader { magic: MAGIC, major: 1, minor: 3 };
 
 #[derive(Debug)]
-pub struct Model {
+pub struct V1 {
 	pub quantities: Quantities,
-	pub root: Root,
+	pub center: Pos3,
+	pub unknown: u8,
+	pub points: Vec<u32>,
 	pub triangles: Vec<(Vertex, Vertex, Vertex)>,
 	pub triangle_groups: Vec<TriangleGroup>,
 	pub materials: Vec<Material>,
@@ -26,12 +31,27 @@ pub struct Model {
 	pub frames: Vec<Frame>
 }
 
-impl Model {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+impl V1 {
+	pub fn read<R>(r: &mut R) -> io::Result<(Self, NodeData)> where R: Read {
 		let quantities = Quantities::read(r)?;
 
-		Ok(Model {
-			root: Root::read(r, quantities.vertex_points)?,
+		let node = NodeData {
+			additional_models: quantities.additional_models,
+			name: Cow::Owned(string::read_string_iso(r)?)
+		};
+
+		Ok((V1 {
+			center: Pos3::read(r)?,
+			unknown: r.read_u8()?,
+			points: {
+				let mut points = Vec::with_capacity(quantities.vertex_points as usize);
+
+				for _ in 0..quantities.vertex_points {
+					points.push(r.read_u32::<LittleEndian>()?);
+				}
+
+				points
+			},
 			triangles: {
 				let mut triangles = Vec::with_capacity(quantities.triangles as usize);
 
@@ -94,7 +114,7 @@ impl Model {
 				frames
 			},
 			quantities
-		})
+		}, node ))
 	}
 }
 
@@ -125,36 +145,6 @@ impl Quantities {
 			vertices:  r.read_u32::<LittleEndian>()?,
 			tag_points:  r.read_u32::<LittleEndian>()?,
 			additional_models:  r.read_u32::<LittleEndian>()?
-		})
-	}
-}
-
-/// Contains the information about the root. Appears to simply define the center of the model.
-#[derive(Debug)]
-pub struct Root {
-	/// Name of this sub-model, or just "Scene Root" if this is the root model.
-	pub name: String,
-	/// The point that represents the center of the model.
-	pub center: Pos3,
-	pub unknown: u8,
-	pub points: Vec<u32>
-}
-
-impl Root {
-	pub fn read<R>(r: &mut R, vertex_points: u32) -> io::Result<Self> where R: Read {
-		Ok(Root {
-			name: string::read_string_iso(r)?,
-			center: Pos3::read(r)?,
-			unknown: r.read_u8()?,
-			points: {
-				let mut points = Vec::with_capacity(vertex_points as usize);
-
-				for _ in 0..vertex_points {
-					points.push(r.read_u32::<LittleEndian>()?);
-				}
-
-				points
-			}
 		})
 	}
 }
@@ -248,6 +238,7 @@ impl Material {
 pub struct Frame {
 	pub radius:           f32,
 	pub points:           Vec<Pos3>,
+	/// Quantized normal vector index. 10086 to choose from.
 	pub normals:          Vec<u16>,
 	// pub triangle_normals: Vec<Pos3>, // Removed in v1.3
 	pub tag_points:       Vec<Pos3>,

@@ -1,7 +1,7 @@
 use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Mat4(pub [f32; 16]);
 
 impl Mat4 {
@@ -47,9 +47,24 @@ impl Mat4 {
 		w.write_f32::<LittleEndian>(self.0[14])?;
 		w.write_f32::<LittleEndian>(self.0[15])
 	}
+
+	pub fn is_identity(&self) -> bool {
+		*self == Self::default()
+	}
 }
 
-#[derive(Debug, Copy, Clone)]
+impl Default for Mat4 {
+	fn default() -> Self {
+		Mat4([
+			1.0, 0.0, 0.0, 0.0,
+			0.0, 1.0, 0.0, 0.0,
+			0.0, 0.0, 1.0, 0.0,
+			0.0, 0.0, 0.0, 1.0
+		])
+	}
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct Pos2(pub f32, pub f32);
 
 impl Pos2 {
@@ -66,7 +81,7 @@ impl Pos2 {
 	}
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct Pos3(pub f32, pub f32, pub f32);
 
 impl Pos3 {
@@ -82,26 +97,5 @@ impl Pos3 {
 		w.write_f32::<LittleEndian>(self.0)?;
 		w.write_f32::<LittleEndian>(self.1)?;
 		w.write_f32::<LittleEndian>(self.2)
-	}
-}
-
-/// An axis-aligned bounding box containing a lower corner and upper corner.
-#[derive(Debug)]
-pub struct Aabb {
-	pub lower: Pos3,
-	pub upper: Pos3
-}
-
-impl Aabb {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(Aabb {
-			lower: Pos3::read(r)?,
-			upper: Pos3::read(r)?
-		})
-	}
-
-	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
-		self.lower.write(w)?;
-		self.upper.write(w)
 	}
 }

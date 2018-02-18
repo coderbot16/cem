@@ -1,26 +1,27 @@
-use types::{Mat4, Pos3, Pos2, Aabb};
+use types::{Mat4, Pos3, Pos2};
+use collider::Aabb;
 use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
 use ::{string, ModelHeader, MAGIC};
-
-/// Expected: SSMF v2.0
-pub const EXPECTED_MODEL_HEADER: ModelHeader = ModelHeader { magic: MAGIC, major: 2, minor: 0 };
+use collider::{Collider, ColliderBuilder};
+use scene::{NodeData, Model};
+use std::borrow::Cow;
 
 /// Contains metadata about the quantities of certain things in this file.
 /// Not useful on its own, but necessary to parse the rest of the file.
 #[derive(Debug)]
-pub struct Quantities {
-	pub triangles: u32,
-	pub vertices: u32,
-	pub tags: u32,
-	pub materials: u32,
-	pub frames: u32,
-	pub additional_models: u32,
-	pub lod_levels: u32
+struct Quantities {
+	triangles: u32,
+	vertices: u32,
+	tags: u32,
+	materials: u32,
+	frames: u32,
+	additional_models: u32,
+	lod_levels: u32
 }
 
 impl Quantities {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+	fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
 		Ok(Quantities {
 			triangles:         r.read_u32::<LittleEndian>()?,
 			vertices:          r.read_u32::<LittleEndian>()?,
@@ -32,7 +33,7 @@ impl Quantities {
 		})
 	}
 
-	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
+	fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
 		w.write_u32::<LittleEndian>(self.triangles)?;
 		w.write_u32::<LittleEndian>(self.vertices)?;
 		w.write_u32::<LittleEndian>(self.tags)?;
@@ -88,20 +89,52 @@ impl TriangleSelection {
 
 /// A model. This contains all of the relevant sub structures.
 #[derive(Debug)]
-pub struct Model {
-	pub triangles:         u32,
-	pub additional_models: u32,
-	pub root:              Root,
+pub struct V2 {
+	pub center:            Pos3,
 	pub lod_levels:        Vec<Vec<Triangle>>,
 	pub materials:         Vec<Material>,
 	pub tag_points:        Vec<String>,
 	pub frames:            Vec<Frame>
 }
 
-impl Model {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+impl V2 {
+	fn quantities(&self, additional_models: u32) -> Result<Quantities, &'static str> {
+		if self.materials.len() == 0 {
+			return Err("A model must have at least 1 material");
+		}
+
+		if self.lod_levels.len() == 0 {
+			return Err("A model must have at least 1 LOD level");
+		}
+
+		if self.frames.len() == 0 {
+			return Err("A model must have at least 1 frame")
+		}
+
+		Ok(Quantities {
+			triangles:         self.lod_levels[0].len() as u32,
+			vertices:          self.frames[0].vertices.len() as u32,
+			tags:              self.tag_points.len() as u32,
+			materials:         self.materials.len() as u32,
+			frames:            self.frames.len() as u32,
+			additional_models,
+			lod_levels:        self.lod_levels.len() as u32
+		})
+	}
+}
+
+impl Model for V2 {
+	const HEADER: ModelHeader = ModelHeader { magic: MAGIC, major: 2, minor: 0 };
+
+	fn read<R>(r: &mut R) -> io::Result<(Self, NodeData)> where R: Read {
 		let quantities = Quantities::read(r)?;
-		let root = Root::read(r)?;
+
+		let node = NodeData {
+			additional_models: quantities.additional_models,
+			name: Cow::Owned(string::read_string_iso(r)?)
+		};
+
+		let center = Pos3::read(r)?;
 
 		let mut lod_levels = Vec::with_capacity(quantities.lod_levels as usize);
 		for _ in 0..lod_levels.capacity() {
@@ -130,46 +163,22 @@ impl Model {
 			frames.push(Frame::read(r, quantities.vertices as usize, tag_points.len())?);
 		}
 
-		Ok(Model {
-			triangles: quantities.triangles,
-			additional_models: quantities.additional_models,
-			root,
+		Ok((V2 {
+			center,
 			lod_levels,
 			materials,
 			tag_points,
 			frames
-		})
+		}, node ))
 	}
 
-	pub fn quantities(&self) -> Result<Quantities, &'static str> {
-		if self.materials.len() == 0 {
-			return Err("A model must have at least 1 material");
-		}
-
-		if self.lod_levels.len() == 0 {
-			return Err("A model must have at least 1 LOD level");
-		}
-
-		if self.frames.len() == 0 {
-			return Err("A model must have at least 1 frame")
-		}
-
-		Ok(Quantities {
-			triangles:         self.triangles,
-			vertices:          self.frames[0].vertices.len() as u32,
-			tags:              self.tag_points.len() as u32,
-			materials:         self.materials.len() as u32,
-			frames:            self.frames.len() as u32,
-			additional_models: self.additional_models,
-			lod_levels:        self.lod_levels.len() as u32
-		})
-	}
-
-	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
-		let quantities = self.quantities().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+	fn write<W>(&self, w: &mut W, node: NodeData) -> io::Result<()> where W: Write {
+		let quantities = self.quantities(node.additional_models).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
 		quantities.write(w)?;
-		self.root.write(w)?;
+
+		string::write_string_iso(w, &node.name)?;
+		self.center.write(w)?;
 
 		for triangles in &self.lod_levels {
 			w.write_u32::<LittleEndian>(triangles.len() as u32)?;
@@ -192,29 +201,6 @@ impl Model {
 		}
 
 		Ok(())
-	}
-}
-
-/// Contains the information about the root. Appears to simply define the center of the model.
-#[derive(Debug)]
-pub struct Root {
-	/// Name of this sub-model, or just "Scene Root" if this is the root model.
-	pub name: String,
-	/// The point that represents the center of the model.
-	pub center: Pos3
-}
-
-impl Root {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(Root {
-			name: string::read_string_iso(r)?,
-			center: Pos3::read(r)?
-		})
-	}
-
-	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
-		string::write_string_iso(w, &self.name)?;
-		self.center.write(w)
 	}
 }
 
@@ -276,17 +262,34 @@ impl Material {
 /// This is made up entirely of 32-bit floating point data.
 #[derive(Debug)]
 pub struct Frame {
-	pub radius:     f32,
 	pub vertices:   Vec<Vertex>,
 	pub tag_points: Vec<Pos3>,
 	pub transform:  Mat4,
-	pub bound:      Aabb
+	pub collider:   Collider
 }
 
 impl Frame {
+	pub fn from_vertices(vertices: Vec<Vertex>, tag_points: Vec<Pos3>, center: Pos3) -> Self {
+		let mut builder = ColliderBuilder::begin(center);
+
+		for vertex in &vertices {
+			builder.update(vertex.position);
+		}
+
+		let collider = builder.build();
+
+		Frame {
+			vertices,
+			tag_points,
+			transform: Mat4::default(),
+			collider
+		}
+	}
+
 	pub fn read<R>(r: &mut R, vertex_count: usize, tag_point_count: usize) -> io::Result<Self> where R: Read {
-		Ok(Frame{
-			radius: r.read_f32::<LittleEndian>()?,
+		let radius = r.read_f32::<LittleEndian>()?;
+
+		Ok(Frame {
 			vertices: {
 				let mut vertices = Vec::with_capacity(vertex_count);
 				for _ in 0..vertex_count {
@@ -304,12 +307,15 @@ impl Frame {
 				tag_points
 			},
 			transform: Mat4::read(r)?,
-			bound: Aabb::read(r)?
+			collider: Collider {
+				radius,
+				aabb: Aabb::read(r)?
+			}
 		})
 	}
 
 	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
-		w.write_f32::<LittleEndian>(self.radius)?;
+		w.write_f32::<LittleEndian>(self.collider.radius)?;
 
 		for vertex in &self.vertices {
 			vertex.write(w)?;
@@ -320,7 +326,7 @@ impl Frame {
 		}
 
 		self.transform.write(w)?;
-		self.bound.write(w)
+		self.collider.aabb.write(w)
 	}
 }
 

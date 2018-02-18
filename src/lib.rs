@@ -27,7 +27,11 @@ pub const MAGIC: u32 = 0x464D5353;
 
 pub use v1::V1;
 pub use v2::V2;
+pub use v5::V5;
 pub use scene::{Scene, Model};
+
+// TODO: We should implement something comparable to the Edge Collapse
+// LOD generation that Titan uses.
 
 /// The header, contains the magic number and revision. The current revision is 2.
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]

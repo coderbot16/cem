@@ -1,10 +1,10 @@
 extern crate cem;
 
-use cem::{ModelHeader, v1, v2, v5};
+use cem::{ModelHeader, Model, v1, V2, V5};
 use std::io::BufReader;
 
-const PATH: &str = "/home/coderbot/Programming/Java/EmpireEarthReverse/extract/data/models";
-// const PATH: &str = "/home/coderbot/Empire Earth/DOTMW Data Files/models";
+// const PATH: &str = "/home/coderbot/Programming/Java/EmpireEarthReverse/extract/data/models";
+const PATH: &str = "/home/coderbot/Empire Earth/DOTMW Data Files/models";
 
 fn main() {
 	for entry in ::std::fs::read_dir(PATH).unwrap() {
@@ -16,14 +16,14 @@ fn main() {
 
 		let header = ModelHeader::read(&mut file).unwrap();
 
-		if header == v2::EXPECTED_MODEL_HEADER {
+		if header == V2::HEADER {
 
-			let model = v2::V2::read(&mut file).unwrap();
+			let (model, node) = V2::read(&mut file).unwrap();
 
 			for frame in &model.frames {
 				use cem::collider::ColliderBuilder;
 
-				let mut builder = ColliderBuilder::begin(model.node.center);
+				let mut builder = ColliderBuilder::begin(model.center);
 				for vertex in &frame.vertices {
 					builder.update(vertex.position);
 				}
@@ -46,7 +46,7 @@ fn main() {
 		} else if header == v1::EXPECTED_MODEL_HEADER {
 			print!("V1.3 | {:32} ", name);
 
-			let model = v1::V1::read(&mut file).unwrap();
+			let (model, node) = v1::V1::read(&mut file).unwrap();
 
 			println!("{:?}", model.quantities);
 			println!("  {:?}", model.materials);
@@ -54,10 +54,17 @@ fn main() {
 
 			//println!("{:?}", model);
 
-			//println!("{:?}", legacy::Quantities::read(&mut file).unwrap());
+		} else if header == V5::HEADER {
+			print!("V5.0 | {:32} ", name);
 
-		} else if header == v5::EXPECTED_MODEL_HEADER {
-			// TODO
+			let (model, node) = V5::read(&mut file).unwrap();
+
+			println!("{:?}", model.quantities);
+			println!("  {:?}", model.materials);
+			println!("  {:?}", model.tag_points);
+
+			//println!("{:?}", model);
+
 		} else {
 			println!("unexpected header for file {}: {:?}", name, header);
 		}

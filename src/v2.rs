@@ -7,13 +7,15 @@ use collider::{Collider, ColliderBuilder};
 use scene::{NodeData, Model};
 use std::borrow::Cow;
 
+pub type VertexIndex = u32;
+
 /// Contains metadata about the quantities of certain things in this file.
 /// Not useful on its own, but necessary to parse the rest of the file.
 #[derive(Debug)]
 struct Quantities {
 	triangles: u32,
 	vertices: u32,
-	tags: u32,
+	tag_points: u32,
 	materials: u32,
 	frames: u32,
 	additional_models: u32,
@@ -25,7 +27,7 @@ impl Quantities {
 		Ok(Quantities {
 			triangles:         r.read_u32::<LittleEndian>()?,
 			vertices:          r.read_u32::<LittleEndian>()?,
-			tags:              r.read_u32::<LittleEndian>()?,
+			tag_points:        r.read_u32::<LittleEndian>()?,
 			materials:         r.read_u32::<LittleEndian>()?,
 			frames:            r.read_u32::<LittleEndian>()?,
 			additional_models: r.read_u32::<LittleEndian>()?,
@@ -36,7 +38,7 @@ impl Quantities {
 	fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
 		w.write_u32::<LittleEndian>(self.triangles)?;
 		w.write_u32::<LittleEndian>(self.vertices)?;
-		w.write_u32::<LittleEndian>(self.tags)?;
+		w.write_u32::<LittleEndian>(self.tag_points)?;
 		w.write_u32::<LittleEndian>(self.materials)?;
 		w.write_u32::<LittleEndian>(self.frames)?;
 		w.write_u32::<LittleEndian>(self.additional_models)?;
@@ -44,54 +46,11 @@ impl Quantities {
 	}
 }
 
-pub type VertexIndex = u32;
-
-/// An indexed triangle. The 3 indices represent the 3 vertices that make up this triangle.
-#[derive(Debug)]
-pub struct Triangle(pub VertexIndex, pub VertexIndex, pub VertexIndex);
-
-impl Triangle {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(Triangle(
-			r.read_u32::<LittleEndian>()?,
-			r.read_u32::<LittleEndian>()?,
-			r.read_u32::<LittleEndian>()?
-		))
-	}
-
-	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
-		w.write_u32::<LittleEndian>(self.0)?;
-		w.write_u32::<LittleEndian>(self.1)?;
-		w.write_u32::<LittleEndian>(self.2)
-	}
-}
-
-/// Selects a range of triangles.
-#[derive(Debug, Copy, Clone)]
-pub struct TriangleSelection {
-	pub offset: u32,
-	pub len: u32
-}
-
-impl TriangleSelection {
-	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
-		Ok(TriangleSelection {
-			offset: r.read_u32::<LittleEndian>()?,
-			len: r.read_u32::<LittleEndian>()?
-		})
-	}
-
-	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
-		w.write_u32::<LittleEndian>(self.offset)?;
-		w.write_u32::<LittleEndian>(self.len)
-	}
-}
-
 /// A model. This contains all of the relevant sub structures.
 #[derive(Debug)]
 pub struct V2 {
 	pub center:            Pos3,
-	pub lod_levels:        Vec<Vec<Triangle>>,
+	pub lod_levels:        Vec<Vec<(VertexIndex, VertexIndex, VertexIndex)>>,
 	pub materials:         Vec<Material>,
 	pub tag_points:        Vec<String>,
 	pub frames:            Vec<Frame>
@@ -114,7 +73,7 @@ impl V2 {
 		Ok(Quantities {
 			triangles:         self.lod_levels[0].len() as u32,
 			vertices:          self.frames[0].vertices.len() as u32,
-			tags:              self.tag_points.len() as u32,
+			tag_points:        self.tag_points.len() as u32,
 			materials:         self.materials.len() as u32,
 			frames:            self.frames.len() as u32,
 			additional_models,
@@ -142,7 +101,11 @@ impl Model for V2 {
 
 			let mut triangles = Vec::with_capacity(count as usize);
 			for _ in 0..count {
-				triangles.push(Triangle::read(r)?);
+				triangles.push((
+					r.read_u32::<LittleEndian>()?,
+					r.read_u32::<LittleEndian>()?,
+					r.read_u32::<LittleEndian>()?
+				));
 			}
 
 			lod_levels.push(triangles);
@@ -153,7 +116,7 @@ impl Model for V2 {
 			materials.push(Material::read(r, lod_levels.len())?);
 		}
 
-		let mut tag_points = Vec::with_capacity(quantities.tags as usize);
+		let mut tag_points = Vec::with_capacity(quantities.tag_points as usize);
 		for _ in 0..tag_points.capacity() {
 			tag_points.push(string::read_string_iso(r)?);
 		}
@@ -184,7 +147,9 @@ impl Model for V2 {
 			w.write_u32::<LittleEndian>(triangles.len() as u32)?;
 
 			for triangle in triangles {
-				triangle.write(w)?;
+				w.write_u32::<LittleEndian>(triangle.0)?;
+				w.write_u32::<LittleEndian>(triangle.1)?;
+				w.write_u32::<LittleEndian>(triangle.2)?;
 			}
 		}
 
@@ -254,6 +219,27 @@ impl Material {
 		string::write_string_iso(w, &self.texture_name)?;
 
 		Ok(())
+	}
+}
+
+/// Selects a range of triangles.
+#[derive(Debug, Copy, Clone)]
+pub struct TriangleSelection {
+	pub offset: u32,
+	pub len: u32
+}
+
+impl TriangleSelection {
+	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+		Ok(TriangleSelection {
+			offset: r.read_u32::<LittleEndian>()?,
+			len: r.read_u32::<LittleEndian>()?
+		})
+	}
+
+	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
+		w.write_u32::<LittleEndian>(self.offset)?;
+		w.write_u32::<LittleEndian>(self.len)
 	}
 }
 

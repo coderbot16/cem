@@ -8,6 +8,25 @@ const INFINITE_AABB: Aabb = Aabb {
 	upper: Pos3(-f32::INFINITY, -f32::INFINITY, -f32::INFINITY)
 };
 
+pub struct CenterBuilder(Aabb);
+impl CenterBuilder {
+	pub fn begin() -> Self {
+		CenterBuilder(INFINITE_AABB)
+	}
+
+	pub fn update(&mut self, point: Pos3) {
+		self.0 = self.0.with(point);
+	}
+
+	pub fn build(&self) -> Pos3 {
+		Pos3 (
+			(self.0.upper.0 + self.0.lower.0) / 2.0,
+			(self.0.upper.1 + self.0.lower.1) / 2.0,
+			(self.0.upper.2 + self.0.lower.2) / 2.0
+		)
+	}
+}
+
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct Collider {
 	pub aabb: Aabb,

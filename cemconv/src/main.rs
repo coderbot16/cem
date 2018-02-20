@@ -4,10 +4,12 @@ extern crate structopt;
 extern crate structopt_derive;
 extern crate wavefront_obj;
 
-use wavefront_obj::obj::{self, Object};
+use wavefront_obj::obj::{self, Object, Primitive, VTNIndex};
 use std::fs::File;
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use cem::{ModelHeader, v2, V2, Scene, Model};
+use cem::types::{Pos2, Pos3};
 
 #[derive(StructOpt, Debug)]
 struct Opt {
@@ -122,8 +124,82 @@ fn convert<I, O>(mut i: I, mut o: O, input_format: Format, format: Format) -> io
 	}
 }
 
-fn obj_to_cem(_i: &Object) -> V2 {
-	unimplemented!("OBJ to CEM not supported.")
+fn obj_to_cem(i: &Object) -> V2 {
+	let mut triangles = Vec::new();
+	let mut vertices = Vec::new();
+
+	{
+		let mut vertex_associations = HashMap::new();
+
+		let mut resolve_index = |v: VTNIndex| {
+			*vertex_associations.entry(v).or_insert_with(|| {
+				let index = vertices.len();
+
+				let position = i.vertices[v.0];
+				let texture = v.1.map(|index| i.tex_vertices[index]).unwrap_or(obj::TVertex { u: 0.0, v: 0.0, w: 0.0 });
+				let normal = v.2.map(|index| i.normals[index]).unwrap_or(obj::Vertex { x: 1.0, y: 0.0, z: 0.0 });
+
+				vertices.push(v2::Vertex {
+					position: Pos3(position.x as f32, position.z as f32, position.y as f32),
+					texture: Pos2(texture.u as f32, texture.v as f32),
+					normal: Pos3(normal.x as f32, normal.z as f32, normal.y as f32)
+				});
+
+				index
+			})
+		};
+
+		for geometry in &i.geometry {
+			for primitive in geometry.shapes.iter().map(|shape| shape.primitive) {
+				match primitive {
+					Primitive::Triangle(v0, v1, v2) => {
+						triangles.push((
+							resolve_index(v0) as u32,
+							resolve_index(v1) as u32,
+							resolve_index(v2) as u32
+						));
+					},
+					_ => () // Skip lines and points, not supported.
+				}
+			}
+		}
+	}
+
+	let first_triangle = triangles[0];
+
+	// Create the model
+
+	let mut center_builder = ::cem::collider::CenterBuilder::begin();
+
+	for vertex in &vertices {
+		center_builder.update(vertex.position);
+	}
+
+	let center = center_builder.build();
+
+	V2 {
+		center,
+		materials: vec![v2::Material {
+			name: "".to_string(),
+			texture: 0,
+			triangles: vec![
+				v2::TriangleSelection {
+					offset: 0,
+					len: triangles.len() as u32
+				}
+			],
+			vertex_offset: 0,
+			vertex_count: vertices.len() as u32,
+			texture_name: "".to_string()
+		}],
+		lod_levels: vec![
+			triangles
+		],
+		tag_points: vec![],
+		frames: vec![
+			v2::Frame::from_vertices(vertices, vec![], center)
+		]
+	}
 }
 
 fn cem2_to_obj(cem: V2) -> String {

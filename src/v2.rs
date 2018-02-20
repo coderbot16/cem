@@ -174,16 +174,18 @@ impl Model for V2 {
 /// is used to render the player color.
 #[derive(Debug)]
 pub struct Material {
+	/// A name. Empire Earth does not appear to care about the value.
 	pub name: String,
 	/// The bound texture used by this material. The texture bindings are managed externally,
 	/// in most cases by a file like dbgraphics.
+	/// Note: the true meaning of this value is unknown, and 0 seems to work.
 	pub texture: u32,
 	/// The range of triangles for each LOD level.
 	pub triangles: Vec<TriangleSelection>,
 	/// Value that the vertex index of
 	pub vertex_offset: VertexIndex,
 	pub vertex_count: u32,
-	/// Name of the texture used.
+	/// Name of the texture used. Empire Earth does not appear to care about the value.
 	pub texture_name: String
 }
 

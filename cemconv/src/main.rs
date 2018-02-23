@@ -1,4 +1,5 @@
 extern crate cem;
+extern crate cgmath;
 extern crate structopt;
 #[macro_use]
 extern crate structopt_derive;
@@ -8,8 +9,8 @@ use wavefront_obj::obj::{self, Object, Primitive, VTNIndex};
 use std::fs::File;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use cem::{ModelHeader, v2, V2, Scene, Model};
-use cem::types::{Pos2, Pos3};
+use cem::{ModelHeader, v2, V2, Scene, Model, Encode};
+use cgmath::{Point2, Point3, Vector3, Matrix4, Deg, InnerSpace};
 
 #[derive(StructOpt, Debug)]
 struct Opt {
@@ -128,6 +129,8 @@ fn obj_to_cem(i: &Object) -> V2 {
 	let mut triangles = Vec::new();
 	let mut vertices = Vec::new();
 
+	let transformation = Matrix4::from_angle_x(Deg(90.0));
+
 	{
 		let mut vertex_associations = HashMap::new();
 
@@ -139,10 +142,16 @@ fn obj_to_cem(i: &Object) -> V2 {
 				let texture = v.1.map(|index| i.tex_vertices[index]).unwrap_or(obj::TVertex { u: 0.0, v: 0.0, w: 0.0 });
 				let normal = v.2.map(|index| i.normals[index]).unwrap_or(obj::Vertex { x: 1.0, y: 0.0, z: 0.0 });
 
+				let normal = Vector3 { x: normal.x as f32, y: normal.y as f32, z: normal.z as f32 };
+				let position = Point3 { x: position.x as f32, y: position.y as f32, z: position.z as f32 };
+
+				let normal = (transformation * normal.normalize().extend(0.0)).truncate();
+				let position = Point3::from_homogeneous(transformation * position.to_homogeneous());
+
 				vertices.push(v2::Vertex {
-					position: Pos3(position.x as f32, position.z as f32, position.y as f32),
-					texture: Pos2(texture.u as f32, texture.v as f32),
-					normal: Pos3(normal.x as f32, normal.z as f32, normal.y as f32)
+					position,
+					normal,
+					texture: Point2 { x: texture.u as f32, y: texture.v as f32 },
 				});
 
 				index
@@ -164,8 +173,6 @@ fn obj_to_cem(i: &Object) -> V2 {
 			}
 		}
 	}
-
-	let first_triangle = triangles[0];
 
 	// Create the model
 
@@ -210,12 +217,16 @@ fn cem2_to_obj(cem: V2) -> String {
 
 	let mut string = String::new();
 
+	let transformation = Matrix4::from_angle_x(Deg(-90.0));
+
 	for &v2::Vertex { position, normal, texture } in frame.vertices.iter() {
-		// Swap Y and Z to make models look upright. However, this seems to make them appear flipped across the Y=X axis?
-		// TODO: This needs to be investigated further.
-		writeln!(string, "v {} {} {}", position.0, position.2, position.1).unwrap();
-		writeln!(string, "vn {} {} {}", normal.0, normal.2, normal.1).unwrap();
-		writeln!(string, "vt {} {}", texture.0, texture.1).unwrap();
+
+		let normal = (transformation * normal.normalize().extend(0.0)).truncate();
+		let position = Point3::from_homogeneous(transformation * position.to_homogeneous());
+
+		writeln!(string, "v {} {} {}", position.x, position.y, position.z).unwrap();
+		writeln!(string, "vn {} {} {}", normal.x, normal.y, normal.z).unwrap();
+		writeln!(string, "vt {} {}", texture.x, texture.y).unwrap();
 	}
 
 	for &v2::Material { ref name, texture, ref triangles, vertex_offset, vertex_count: _vertex_count, ref texture_name } in &cem.materials {

@@ -1,8 +1,8 @@
-use types::{Mat4, Pos3, Pos2};
+use cgmath::{Point2, Point3, Vector3, Matrix4, SquareMatrix};
 use collider::Aabb;
 use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
-use ::{string, ModelHeader, MAGIC};
+use {ModelHeader, MAGIC, Encode};
 use collider::{Collider, ColliderBuilder};
 use scene::{NodeData, Model};
 use std::borrow::Cow;
@@ -49,7 +49,7 @@ impl Quantities {
 /// A model. This contains all of the relevant sub structures.
 #[derive(Debug)]
 pub struct V2 {
-	pub center:            Pos3,
+	pub center:            Point3<f32>,
 	pub lod_levels:        Vec<Vec<(VertexIndex, VertexIndex, VertexIndex)>>,
 	pub materials:         Vec<Material>,
 	pub tag_points:        Vec<String>,
@@ -90,10 +90,10 @@ impl Model for V2 {
 
 		let node = NodeData {
 			additional_models: quantities.additional_models,
-			name: Cow::Owned(string::read_string_iso(r)?)
+			name: Cow::Owned(String::read(r)?)
 		};
 
-		let center = Pos3::read(r)?;
+		let center = Point3::read(r)?;
 
 		let mut lod_levels = Vec::with_capacity(quantities.lod_levels as usize);
 		for _ in 0..lod_levels.capacity() {
@@ -118,7 +118,7 @@ impl Model for V2 {
 
 		let mut tag_points = Vec::with_capacity(quantities.tag_points as usize);
 		for _ in 0..tag_points.capacity() {
-			tag_points.push(string::read_string_iso(r)?);
+			tag_points.push(String::read(r)?);
 		}
 
 		let mut frames = Vec::with_capacity(quantities.frames as usize);
@@ -140,7 +140,7 @@ impl Model for V2 {
 
 		quantities.write(w)?;
 
-		string::write_string_iso(w, &node.name)?;
+		node.name.write(w)?;
 		self.center.write(w)?;
 
 		for triangles in &self.lod_levels {
@@ -158,7 +158,7 @@ impl Model for V2 {
 		}
 
 		for tag_point in &self.tag_points {
-			string::write_string_iso(w, tag_point)?;
+			tag_point.write(w)?;
 		}
 
 		for frame in &self.frames {
@@ -192,7 +192,7 @@ pub struct Material {
 impl Material {
 	pub fn read<R>(r: &mut R, lod_levels: usize) -> io::Result<Self> where R: Read {
 		Ok(Material {
-			name: string::read_string_iso(r)?,
+			name: String::read(r)?,
 			texture: r.read_u32::<LittleEndian>()?,
 			triangles: {
 				let mut ranges = Vec::with_capacity(lod_levels);
@@ -204,12 +204,12 @@ impl Material {
 			},
 			vertex_offset: r.read_u32::<LittleEndian>()?,
 			vertex_count: r.read_u32::<LittleEndian>()?,
-			texture_name: string::read_string_iso(r)?
+			texture_name: String::read(r)?
 		})
 	}
 
 	pub fn write<W>(&self, w: &mut W) -> io::Result<()> where W: Write {
-		string::write_string_iso(w, &self.name)?;
+		self.name.write(w)?;
 		w.write_u32::<LittleEndian>(self.texture)?;
 
 		for selection in &self.triangles {
@@ -218,7 +218,7 @@ impl Material {
 
 		w.write_u32::<LittleEndian>(self.vertex_offset)?;
 		w.write_u32::<LittleEndian>(self.vertex_count)?;
-		string::write_string_iso(w, &self.texture_name)?;
+		self.texture_name.write(w)?;
 
 		Ok(())
 	}
@@ -251,13 +251,13 @@ impl TriangleSelection {
 #[derive(Debug)]
 pub struct Frame {
 	pub vertices:   Vec<Vertex>,
-	pub tag_points: Vec<Pos3>,
-	pub transform:  Mat4,
+	pub tag_points: Vec<Point3<f32>>,
+	pub transform:  Matrix4<f32>,
 	pub collider:   Collider
 }
 
 impl Frame {
-	pub fn from_vertices(vertices: Vec<Vertex>, tag_points: Vec<Pos3>, center: Pos3) -> Self {
+	pub fn from_vertices(vertices: Vec<Vertex>, tag_points: Vec<Point3<f32>>, center: Point3<f32>) -> Self {
 		let mut builder = ColliderBuilder::begin(center);
 
 		for vertex in &vertices {
@@ -269,7 +269,7 @@ impl Frame {
 		Frame {
 			vertices,
 			tag_points,
-			transform: Mat4::default(),
+			transform: Matrix4::identity(),
 			collider
 		}
 	}
@@ -289,12 +289,12 @@ impl Frame {
 			tag_points: {
 				let mut tag_points = Vec::with_capacity(tag_point_count);
 				for _ in 0..tag_point_count {
-					tag_points.push(Pos3::read(r)?);
+					tag_points.push(Point3::read(r)?);
 				}
 
 				tag_points
 			},
-			transform: Mat4::read(r)?,
+			transform: Matrix4::read(r)?,
 			collider: Collider {
 				radius,
 				aabb: Aabb::read(r)?
@@ -321,17 +321,17 @@ impl Frame {
 /// A single vertex. Contains the position, a relevant vertex normal, and the position on the material's texture.
 #[derive(Debug, Copy, Clone)]
 pub struct Vertex {
-	pub position: Pos3,
-	pub normal:   Pos3,
-	pub texture:  Pos2
+	pub position: Point3<f32>,
+	pub normal:   Vector3<f32>,
+	pub texture:  Point2<f32>
 }
 
 impl Vertex {
 	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
 		Ok(Vertex {
-			position: Pos3::read(r)?,
-			normal: Pos3::read(r)?,
-			texture: Pos2::read(r)?
+			position: Point3::read(r)?,
+			normal: Vector3::read(r)?,
+			texture: Point2::read(r)?
 		})
 	}
 

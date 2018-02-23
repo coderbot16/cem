@@ -1,8 +1,8 @@
-use types::{Mat4, Pos3};
+use cgmath::{Point3, Matrix4};
 use collider::Aabb;
 use std::io::{self, Read};
 use byteorder::{ReadBytesExt, LittleEndian};
-use ::{string, ModelHeader, MAGIC};
+use {ModelHeader, MAGIC, Encode};
 use scene::NodeData;
 use std::borrow::Cow;
 
@@ -20,7 +20,7 @@ pub const EXPECTED_MODEL_HEADER: ModelHeader = ModelHeader { magic: MAGIC, major
 #[derive(Debug)]
 pub struct V1 {
 	pub quantities: Quantities,
-	pub center: Pos3,
+	pub center: Point3<f32>,
 	pub unknown: u8,
 	pub points: Vec<u32>,
 	pub triangles: Vec<(Vertex, Vertex, Vertex)>,
@@ -37,11 +37,11 @@ impl V1 {
 
 		let node = NodeData {
 			additional_models: quantities.additional_models,
-			name: Cow::Owned(string::read_string_iso(r)?)
+			name: Cow::Owned(String::read(r)?)
 		};
 
 		Ok((V1 {
-			center: Pos3::read(r)?,
+			center: Point3::read(r)?,
 			unknown: r.read_u8()?,
 			points: {
 				let mut points = Vec::with_capacity(quantities.vertex_points as usize);
@@ -99,7 +99,7 @@ impl V1 {
 				let mut tag_points = Vec::with_capacity(quantities.tag_points as usize);
 
 				for _ in 0..quantities.tag_points {
-					tag_points.push(string::read_string_iso(r)?);
+					tag_points.push(String::read(r)?);
 				}
 
 				tag_points
@@ -190,7 +190,7 @@ pub struct TriangleGroup {
 impl TriangleGroup {
 	pub fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
 		Ok(TriangleGroup {
-			name: string::read_string_iso(r)?,
+			name: String::read(r)?,
 			indices: {
 				let len = r.read_u32::<LittleEndian>()?;
 				let mut indices = Vec::with_capacity(len as usize);
@@ -227,7 +227,7 @@ impl Material {
 			},
 			texture: match r.read_u8()? {
 				0 => None,
-				1 => Some((string::read_string_iso(r)?, r.read_u32::<LittleEndian>()?)),
+				1 => Some((String::read(r)?, r.read_u32::<LittleEndian>()?)),
 				x => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("A boolean must be 0 or 1, got {}", x)))
 			}
 		})
@@ -237,12 +237,12 @@ impl Material {
 #[derive(Debug)]
 pub struct Frame {
 	pub radius:           f32,
-	pub points:           Vec<Pos3>,
+	pub points:           Vec<Point3<f32>>,
 	/// Quantized normal vector index. 10086 to choose from.
 	pub normals:          Vec<u16>,
-	// pub triangle_normals: Vec<Pos3>, // Removed in v1.3
-	pub tag_points:       Vec<Pos3>,
-	pub transform:        Mat4,
+	// pub triangle_normals: Vec<Point3<f32>>, // Removed in v1.3
+	pub tag_points:       Vec<Point3<f32>>,
+	pub transform:        Matrix4<f32>,
 	pub bound:            Aabb
 }
 
@@ -254,7 +254,7 @@ impl Frame {
 				let mut points = Vec::with_capacity(quantities.vertex_points as usize);
 
 				for _ in 0..quantities.vertex_points {
-					points.push(Pos3::read(r)?);
+					points.push(Point3::read(r)?);
 				}
 
 				points
@@ -272,7 +272,7 @@ impl Frame {
 				let mut triangle_normals = Vec::with_capacity(quantities.triangles as usize);
 
 				for _ in 0..quantities.triangles {
-					triangle_normals.push(Pos3::read(r)?);
+					triangle_normals.push(Point3::read(r)?);
 				}
 
 				triangle_normals
@@ -281,12 +281,12 @@ impl Frame {
 				let mut tag_points = Vec::with_capacity(quantities.tag_points as usize);
 
 				for _ in 0..quantities.tag_points {
-					tag_points.push(Pos3::read(r)?);
+					tag_points.push(Point3::read(r)?);
 				}
 
 				tag_points
 			},
-			transform: Mat4::read(r)?,
+			transform: Matrix4::read(r)?,
 			bound: Aabb::read(r)?
 		})
 	}

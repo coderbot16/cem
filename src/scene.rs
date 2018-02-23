@@ -1,6 +1,6 @@
 use std::io::{self, Read, Write};
 use std::borrow::Cow;
-use ModelHeader;
+use {ModelHeader, Encode};
 
 pub struct NodeData<'a> {
 	pub additional_models: u32,

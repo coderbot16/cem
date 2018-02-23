@@ -6,3 +6,4 @@ description = "Converter tool for the CEM format."
 
 [dependencies]
 byteorder = "1"
+cgmath = "0.16"

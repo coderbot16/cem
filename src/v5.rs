@@ -1,7 +1,7 @@
 use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
-use {ModelHeader, Model, MAGIC, v2, string};
-use types::Pos3;
+use {ModelHeader, Model, MAGIC, v2, Encode};
+use cgmath::Point3;
 use scene::NodeData;
 use std::borrow::Cow;
 
@@ -46,13 +46,13 @@ impl Quantities {
 #[derive(Debug)]
 pub struct V5 {
 	pub quantities: Quantities,
-	pub center: Pos3,
+	pub center: Point3<f32>,
 	pub common_vertices: Vec<CommonVertex>,
 	pub lod_levels: Vec<Vec<(u16, u16, u16)>>,
 	pub materials: Vec<v2::Material>,
 	pub tag_points: Vec<String>,
 	pub frames: Vec<Frame>,
-	pub points: Vec<Pos3>,
+	pub points: Vec<Point3<f32>>,
 	pub shadow: Vec<ShadowEdge>
 }
 
@@ -75,11 +75,11 @@ impl Model for V5 {
 
 		let node = NodeData {
 			additional_models: quantities.additional_models,
-			name: Cow::Owned(string::read_string_iso(r)?)
+			name: Cow::Owned(String::read(r)?)
 		};
 
 		Ok((V5 {
-			center: Pos3::read(r)?,
+			center: Point3::read(r)?,
 			common_vertices: {
 				let len = r.read_u32::<LittleEndian>()?;
 				let mut common_vertices = Vec::with_capacity(len as usize);
@@ -122,7 +122,7 @@ impl Model for V5 {
 				let mut tag_points = Vec::with_capacity(quantities.tag_points as usize);
 
 				for _ in 0..quantities.tag_points {
-					tag_points.push(string::read_string_iso(r)?);
+					tag_points.push(String::read(r)?);
 				}
 
 				tag_points
@@ -140,7 +140,7 @@ impl Model for V5 {
 				let mut points = Vec::with_capacity(quantities.points as usize);
 
 				for _ in 0..quantities.points {
-					points.push(Pos3::read(r)?);
+					points.push(Point3::read(r)?);
 				}
 
 				points
@@ -164,7 +164,7 @@ impl Model for V5 {
 
 		quantities.write(w)?;
 
-		string::write_string_iso(w, &node.name)?;
+		node.name.write(w)?;
 		self.center.write(w)?;
 
 		// Then common_vertices and the rest
@@ -212,7 +212,7 @@ pub struct Frame {
 }
 
 impl Frame {
-	fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+	fn read<R>(_r: &mut R) -> io::Result<Self> where R: Read {
 		unimplemented!()
 	}
 }
@@ -224,7 +224,7 @@ pub struct ShadowEdge {
 }
 
 impl ShadowEdge {
-	fn read<R>(r: &mut R) -> io::Result<Self> where R: Read {
+	fn read<R>(_r: &mut R) -> io::Result<Self> where R: Read {
 		unimplemented!()
 	}
 }

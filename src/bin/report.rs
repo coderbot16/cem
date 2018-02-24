@@ -1,6 +1,6 @@
 extern crate cem;
 
-use cem::{ModelHeader, Model, v1, V2, V5};
+use cem::{ModelHeader, Model, v1, V2, V5, Encode};
 use std::io::BufReader;
 
 // const PATH: &str = "/home/coderbot/Programming/Java/EmpireEarthReverse/extract/data/models";
@@ -18,7 +18,7 @@ fn main() {
 
 		if header == V2::HEADER {
 
-			let (model, node) = V2::read(&mut file).unwrap();
+			let (model, _) = V2::read(&mut file).unwrap();
 
 			for frame in &model.frames {
 				use cem::collider::ColliderBuilder;
@@ -46,7 +46,7 @@ fn main() {
 		} else if header == v1::EXPECTED_MODEL_HEADER {
 			print!("V1.3 | {:32} ", name);
 
-			let (model, node) = v1::V1::read(&mut file).unwrap();
+			let (model, _) = v1::V1::read(&mut file).unwrap();
 
 			println!("{:?}", model.quantities);
 			println!("  {:?}", model.materials);
@@ -57,7 +57,7 @@ fn main() {
 		} else if header == V5::HEADER {
 			print!("V5.0 | {:32} ", name);
 
-			let (model, node) = V5::read(&mut file).unwrap();
+			let (model, _) = V5::read(&mut file).unwrap();
 
 			println!("{:?}", model.quantities);
 			println!("  {:?}", model.materials);

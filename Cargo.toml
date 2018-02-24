@@ -3,6 +3,8 @@ name = "cem"
 version = "0.1.0"
 authors = ["coderbot16 <coderbot16@gmail.com>"]
 description = "Library for working with CEM files from Empire Earth"
+license = "MIT"
+repository = "https://github.com/coderbot16/cem"
 
 [dependencies]
 byteorder = "1"
